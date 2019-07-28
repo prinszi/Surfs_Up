@@ -19,7 +19,9 @@ def home():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
+        f"for the next query, please provide a start date in the following format 'YYYY-MM-DD'<br/>"
         f"/api/v1.0/<start><br/>"
+        f"for the next query, please provide a start and end date in the following format 'YYYY-MM-DD/YYYY-MM-DD'<br/>"
         f"/api/v1.0/<start>/<end><br/>"
     )
 @app.route("/api/v1.0/precipitation")
@@ -65,23 +67,65 @@ def tobs():
     tobs_dict = dict(tobs_12_mo)
     return jsonify(tobs_dict)
 
-# * `/api/v1.0/<start>` and `/api/v1.0/<start>/<end>`
+@app.route("/api/v1.0/<start>")
+def entry_date(start):
+    engine = create_engine("sqlite:///Resources/hawaii.sqlite")
+    Base = automap_base()
+    Base.prepare(engine, reflect=True)
+    Measurement = Base.classes.measurement
+    Station = Base.classes.station
+    session = Session(engine)
+    tuple_dates = session.query(Measurement.date).all()
+    list_of_dates = [i for (i,) in tuple_dates]
+    search_term = dt.datetime.strptime(start, '%Y-%m-%d')
+    for date in list_of_dates:
+        match = dt.datetime.strptime(date, "%Y-%m-%d")
+        
+        if search_term == match:
+                start_date = search_term.date()
+                the_last_date = session.query(Measurement.date).filter(Measurement.date).order_by(Measurement.date.desc()).first()
+                end_date = dt.datetime.strptime(the_last_date[0], "%Y-%m-%d").date()
+                results = session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).filter(Measurement.date >= start_date).filter(Measurement.date <= end_date).all()
+                min_temp = results[0][0]
+                avg_temp = results[0][1]
+                max_temp = results[0][2]
+                temp_dict = {"min_temp": min_temp,"avg_temp" : avg_temp,"max_temp" : max_temp}
+                return jsonify(temp_dict)
 
-#   * Return a JSON list of the minimum temperature, the average temperature, and the max temperature for a given start or start-end range.
+    return jsonify({"error": f"{start} is not found, or not a valid date."}), 404
 
-#   * When given the start only, calculate `TMIN`, `TAVG`, and `TMAX` for all dates greater than and equal to the start date.
+@app.route("/api/v1.0/<start>/<end>")
+def date_range(start, end):
+    engine = create_engine("sqlite:///Resources/hawaii.sqlite")
+    Base = automap_base()
+    Base.prepare(engine, reflect=True)
+    Measurement = Base.classes.measurement
+    Station = Base.classes.station
+    session = Session(engine)
+    tuple_dates = session.query(Measurement.date).all()
+    list_of_dates = [i for (i,) in tuple_dates]
+    start_search_term = dt.datetime.strptime(start, '%Y-%m-%d')
+    end_search_term = dt.datetime.strptime(end, '%Y-%m-%d')
+    for date in list_of_dates:
+        match = dt.datetime.strptime(date, "%Y-%m-%d")
 
-#   * When given the start and the end date, calculate the `TMIN`, `TAVG`, and `TMAX` for dates between the start and end date inclusive.
+        if start_search_term == match:
+            for date in list_of_dates:
+                match2 = dt.datetime.strptime(date, "%Y-%m-%d")
 
-
-
-
-
-
-
-
-
-
+                if end_search_term == match2:
+                    start_date = start_search_term.date()
+                    end_date = end_search_term.date()
+                    results = session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).filter(Measurement.date >= start_date).filter(Measurement.date <= end_date).all()
+                    min_temp = results[0][0]
+                    avg_temp = results[0][1]
+                    max_temp = results[0][2]
+                    temp_dict = {"min_temp": min_temp,"avg_temp" : avg_temp,"max_temp" : max_temp}
+                    return jsonify(temp_dict)
+                
+            return jsonify({"error":f"{start} was found, however {end} is not found, or not a valid date"}), 404
+       
+    return jsonify({"error": f"{start} is not found, or not a valid date."}), 404
 
 if __name__ == "__main__":
     app.run(debug=True)
